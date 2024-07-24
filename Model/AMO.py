@@ -17,10 +17,11 @@ from Model_predict_start_node import *
 
 
 class Net3(nn.Module):
-    def __init__(self):
+    def __init__(self, k = 10, drop_start_node = False):
         super().__init__()
         self.heuristic_model = Net()
-        self.predict_model = Net2()
+        self.predict_model = Net2(k_start_node=k)
+        self.drop_start_node = drop_start_node
         self.init_parameters()
 
     def init_parameters(self):
@@ -29,17 +30,16 @@ class Net3(nn.Module):
             stdv = 1. / math.sqrt(param.size(-1))
             param.data.uniform_(-stdv, stdv)
 
-    def forward(self, pyg, drop_start_node = False):
+    def forward(self, pyg):
         heuristic_measure = self.heuristic_model(pyg)
-        if drop_start_node:
+        if self.drop_start_node:
             log = -1
             topk = -1
         else:
             log, topk = self.predict_model(pyg, heuristic_measure)
         return heuristic_measure, log, topk 
 
-# device =  torch.device("cuda:0" if True == True else "cpu")
-print(device)
+
 try:
     model = Net3().to(device)
     model.eval()

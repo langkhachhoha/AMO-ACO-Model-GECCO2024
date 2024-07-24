@@ -21,12 +21,12 @@ import matplotlib.pyplot as plt
 EPS = 1e-10
 lr = 3e-4
 
-def final_sol(paths, costs, log_probs, n_ants,  k = 5):
+def final_sol(paths, costs, log_probs, n_ants,  k):
     costs, indices = torch.topk(costs, k*n_ants, largest=False)
     return paths.T[indices].T.to(device), costs.to(device), log_probs.T[indices].T.to(device)
 
 
-def train_instance(n, model, optimizer, n_ants, device):
+def train_instance(cfg, model, optimizer, device):
     model.train()
     CVRPTW = generate_cvrptw_data()
     tsp_coordinates = torch.cat((CVRPTW.depot_loc.expand(1,-1), CVRPTW.node_loc), dim = 0)
@@ -40,20 +40,22 @@ def train_instance(n, model, optimizer, n_ants, device):
     pyg_data_normalize = gen_pyg_data_normalize(demands, time_window, durations, distances, device)
     heuristic_measure, log, topk = model(pyg_data_normalize)
 
-    heuristic_measure = heuristic_measure.reshape((n+1, n+1)) + EPS
+    heuristic_measure = heuristic_measure.reshape((cfg.graph_size + 1, cfg.graph_size + 1)) + EPS
     aco = ACO(distances, # (n, n)
                  demands,   # (n, )
                  time_window, # (n, 3)
                  pyg_data,
-                 10,
+                 cfg.k_start_nodes,
                  model,
                  log,
                  topk,
-              capacity = capacity,
-              heuristic=heuristic_measure)
+                 drop_start_node = cfg.drop,
+                 n_ants=cfg.n_ants,
+                capacity = capacity,
+                heuristic=heuristic_measure)
 
     paths, costs, log_probs = aco.sample()
-    paths, costs, log_probs = final_sol(paths, costs, log_probs, n_ants)
+    paths, costs, log_probs = final_sol(paths, costs, log_probs, cfg.n_ants, cfg.k_start_nodes)
     baseline = costs.mean()
     reinforce_loss = torch.sum((costs - baseline) * log_probs.sum(dim=0)) / (aco.n_ants*2)
     optimizer.zero_grad()
@@ -62,12 +64,9 @@ def train_instance(n, model, optimizer, n_ants, device):
     optimizer.step()
 
 
-def train_epoch(n,
-                model,
-                optimizer, n_ants, device, steps_per_epoch
-                ):
-    for _ in range(steps_per_epoch):
-        train_instance(n, model, optimizer, n_ants, device)
+def train_epoch(cfg, model, optimizer, device):
+    for _ in range(cfg.steps_per_epoch):
+        train_instance(cfg, model, optimizer, device)
         print("Step: ", _)
 
 
@@ -104,15 +103,17 @@ def valid_inference(net, cfg):
                  demands,   # (n, )
                  time_window, # (n, 3)
                  pyg_data,
-                 10,
+                 cfg.k_start_nodes,
                  net,
                  log,
                  topk,
+                 drop_start_node=cfg.drop,
+                 n_ants=cfg.n_ants,
                 capacity=capacity,  
                 heuristic=heuristic_measure)
 
         paths, costs, log_probs = aco.sample()
-        paths, costs, log_probs = final_sol(paths, costs, log_probs, n_ants = cfg.n_ants)
+        paths, costs, log_probs = final_sol(paths, costs, log_probs, cfg.n_ants, cfg.k_start_nodes)
         costs_best, indices = torch.topk(costs, 1, largest=False)
         baseline = costs.mean()
         result.append((baseline, costs_best))
@@ -120,22 +121,18 @@ def valid_inference(net, cfg):
 
 
 def training(cfg):
-    net = Net3().to(device)
+    net = Net3(k = cfg.k_start_nodes ,drop_start_node=cfg.drop).to(device)
     net.train()
     optimizer = torch.optim.AdamW(net.parameters(), cfg.lr)
-
     for epoch in range(0, cfg.epochs):
-        train_epoch(cfg.graph_size,
-                net,
-                optimizer, cfg.n_ants, device, cfg.steps_per_epoch
-                )
+        train_epoch(cfg, net, optimizer, device )
         result = valid_inference(net, cfg)
         for i in range(len(result)):
             baseline, costs_best = result[i]
             print("Data {}: Cost_average = {}  ---  Best = {}".format(i+1, baseline, costs_best))
         print("----------------")
         print('Epoch: ', epoch)
-        torch.save(net.state_dict(), os.path.join('AMO_aco_{}_train.pt'.format(cfg.graph_size)))
+        torch.save(net.state_dict(), cfg.checkpoint)
 
 
 

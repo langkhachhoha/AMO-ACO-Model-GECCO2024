@@ -11,11 +11,11 @@ def get_args():
     parser.add_argument("--n_ants", default=100, type=int, help="number of ants")
     parser.add_argument("--steps_per_epoch", default=100, type=int, help="number of steps per epoch")
     parser.add_argument("--checkpoint", type=str, default='AMO-ACO-train.pt', help="path to model checkpoint file")
+    parser.add_argument("--drop", type=bool, default=False, help="Drop the start node")
+    parser.add_argument("--k_start_nodes", default=10, type=int, help="number of start nodes to sample")
     args = parser.parse_args()
     return args
 
-
 if __name__ == "__main__":
-    print(device)
     args = get_args()
     training(args)

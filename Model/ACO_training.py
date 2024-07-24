@@ -40,6 +40,7 @@ class ACO():
                  log,
                  topk,
                  capacity,
+                 drop_start_node = False,
                  n_ants=50,
                  decay=0.9,
                  alpha=1,
@@ -53,6 +54,7 @@ class ACO():
                  adaptive=False,
                  prob = 0.3
                  ):
+        self.drop_start_node = drop_start_node
         self.prob = prob,
         self.log = log,
         self.topk = topk,
@@ -173,7 +175,6 @@ class ACO():
         return torch.sum(self.distances[u[:, :-1], v[:, :-1]], dim=1)
 
     def gen_path(self, require_prob=False): # training => ok
-        # log, topk = self.model(self.pyg, self.heuristic.view(-1))
         actions = torch.zeros((self.n_ants * self.k,), dtype=torch.long, device=self.device)
 
         visit_mask = torch.ones(size=(self.n_ants * self.k, self.problem_size), device=self.device)
@@ -191,18 +192,19 @@ class ACO():
 
         done = self.check_done(visit_mask, actions)
         # first_start
-        for _ in range(1):
-            pre_node = copy.deepcopy(actions)
-            actions, log_probs = self.topk_start_move(require_prob)
-            paths_list.append(actions)
-            if require_prob:
-                log_probs_list.append(log_probs)
-                visit_mask = visit_mask.clone()
-            visit_mask = self.update_visit_mask(visit_mask, actions)
-            used_capacity, capacity_mask = self.update_capacity_mask(actions, used_capacity)
-            used_time, time_mask = self.update_time_mask(actions, pre_node, used_time)
+        if self.drop_start_node == False:
+            for _ in range(1):
+                pre_node = copy.deepcopy(actions)
+                actions, log_probs = self.topk_start_move(require_prob)
+                paths_list.append(actions)
+                if require_prob:
+                    log_probs_list.append(log_probs)
+                    visit_mask = visit_mask.clone()
+                visit_mask = self.update_visit_mask(visit_mask, actions)
+                used_capacity, capacity_mask = self.update_capacity_mask(actions, used_capacity)
+                used_time, time_mask = self.update_time_mask(actions, pre_node, used_time)
 
-            done = self.check_done(visit_mask, actions)
+                done = self.check_done(visit_mask, actions)
 
         while not done:
             pre_node = copy.deepcopy(actions)
