@@ -44,7 +44,7 @@ class ACO():
                  n_ants=50,
                  decay=0.9,
                  alpha=1,
-                 beta=1,
+                 beta=5,
                  elitist=False,
                  min_max=False,
                  pheromone=None,
