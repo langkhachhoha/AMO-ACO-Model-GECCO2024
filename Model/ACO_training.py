@@ -15,7 +15,6 @@ import math
 import numpy as np
 from Model_predict_start_node import *
 from AMO import Net3
-from Config import *
 
 import torch
 from torch.distributions import Categorical
@@ -29,10 +28,6 @@ from torch.nn import functional as F
 from copy import deepcopy
 
 
-cfg = Data_100()
-
-CAPACITY = cfg.capacity
-
 class ACO():
 
     def __init__(self,  # 0: depot
@@ -44,6 +39,7 @@ class ACO():
                  model,
                  log,
                  topk,
+                 capacity,
                  n_ants=50,
                  decay=0.9,
                  alpha=1,
@@ -55,7 +51,6 @@ class ACO():
                  min=None,
                  device=device,
                  adaptive=False,
-                 capacity=CAPACITY,
                  prob = 0.3
                  ):
         self.prob = prob,
@@ -66,7 +61,7 @@ class ACO():
         self.model = model
         self.problem_size = len(distances)
         self.distances = distances
-        self.capacity = CAPACITY
+        self.capacity = capacity
         self.demand = demand
         self.pyg = pyg
         self.n_ants = n_ants

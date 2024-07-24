@@ -5,10 +5,11 @@ from copy import deepcopy
 import torch_geometric.nn as gnn
 from Gen_CVRPTW_data import *
 import math 
+from Combine_strategy import *
 
 # GNN for edge embeddings
 class EmbNet(nn.Module):
-    def __init__(self, depth=6, feats_cvrp=1, feats_tw = 3,  units=32, act_fn='silu', agg_fn='mean'):
+    def __init__(self, depth=4, feats_cvrp=1, feats_tw = 3,  units=32, act_fn='silu', agg_fn='mean'):
         super().__init__()
         # Parametet for CVRP
         self.depth = int(depth)
@@ -136,14 +137,18 @@ class ParNet(MLP):
 
 
 class Net(nn.Module):
-    def __init__(self):
+    def __init__(self, type = 1):
         super().__init__()
         self.emb_net = EmbNet()
         self.par_net_heu = ParNet()
+        if type == 1:
+            self.combine = MultiPlication_Strategy()
+
     def forward(self, pyg):
         x, y, edge_index, edge_attr = pyg.x, pyg.time_window, pyg.edge_index, pyg.edge_attr
         emb_cvrp, emb_tw = self.emb_net(x, y, edge_index, edge_attr)
-        heu = self.par_net_heu((emb_cvrp * emb_tw))
+        Combine = self.combine(emb_cvrp, emb_tw)
+        heu = self.par_net_heu(Combine)
         return heu
 
     def freeze_gnn(self):
