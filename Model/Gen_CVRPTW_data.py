@@ -5,8 +5,8 @@ from torch_geometric.data import Data
 import os 
 from Data_Aug import *
 
-# device =  torch.device("cuda:0" if True == True else "cpu")
-device = None 
+device =  torch.device("cuda:0" if True == True else "cpu")
+# device = None 
 
 CVRPTW_SET = namedtuple("CVRPTW_SET",
                         ["depot_loc",    # Depot location
