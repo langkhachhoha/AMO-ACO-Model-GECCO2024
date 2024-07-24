@@ -1,5 +1,5 @@
 import argparse
-from train import *
+from Train_funcs import *
 from Gen_CVRPTW_data import *
 
 def get_args():
