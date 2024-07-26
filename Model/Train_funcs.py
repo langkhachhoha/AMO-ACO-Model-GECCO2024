@@ -132,7 +132,7 @@ def training(cfg):
             print("Data {}: Cost_average = {}  ---  Best = {}".format(i+1, baseline, costs_best))
         print("----------------")
         print('Epoch: ', epoch)
-        torch.save(net.state_dict(), cfg.checkpoint)
+        torch.save(net.state_dict(), os.path.join(cfg.checkpoint, 'AMO-ACO-train.pt'))
 
 
 
