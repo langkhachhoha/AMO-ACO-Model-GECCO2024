@@ -8,6 +8,15 @@ from Data_Aug import *
 device =  torch.device("cuda:0" if True == True else "cpu")
 # device = None 
 
+size = 1
+time_factor = 100
+service_duration = 10
+tw_expansion = 3
+service_window = 1000
+loc = 15
+scale = 10
+max_ = 42
+
 CVRPTW_SET = namedtuple("CVRPTW_SET",
                         ["depot_loc",    # Depot location
                          "node_loc",     # Node locations
@@ -18,53 +27,85 @@ CVRPTW_SET = namedtuple("CVRPTW_SET",
                          "durations",    # service duration per node
                         ])   
 
+TW_CAPACITIES = {
+        20: 70.,
+        50: 100.,
+        100: 200.,
+        150: 500.,
+        200: 700. 
+    }
 
-def generate_cvrptw_data():
-    file_list = os.listdir('Model/Data/')
-    num_files = len(file_list)
-    file_path = file_list[np.random.randint(num_files)]
-    data, capacity, veh_num = load_data('Model/Data/' + file_path)
-    depot_loc = data[0, 1:3][None, :]
-    node_loc = data[1:, 1:3]
-    demand = data[1:, 3]
-    capacity = capacity 
-    depot_tw = data[0, 4:6][None, :] 
-    node_tw = data[1:, 4:6]
-    durations = data[1:, 6]
+def generate_cvrptw_data(graph_size = 100):
+    # sample locations
+    rnds = np.random
+    dloc = rnds.uniform(size=(size, 2))  # depot location
+    nloc = rnds.uniform(size=(size, graph_size, 2))  # node locations
 
-    depot_loc, node_loc = add_noise_to_coordinates(depot_loc, node_loc)
-    depot_tw, node_tw = add_noise_to_time(depot_tw, node_tw)
-    
-    if (np.random.rand() < 0.5):
-        node_loc, demand, node_tw, durations = permute_coordinates(node_loc, demand, node_tw, durations)
-    depot_loc = depot_loc.view(-1)
-    depot_tw = depot_tw.view(-1)
+    # TW start needs to be feasibly reachable directly from depot
+    min_t = np.ceil(np.linalg.norm(dloc[:, None, :]*time_factor - nloc*time_factor, axis=-1)) + 1
+    # TW end needs to be early enough to perform service and return to depot until end of service window
+    max_t = np.ceil(np.linalg.norm(dloc[:, None, :]*time_factor - nloc*time_factor, axis=-1) + service_duration) + 1
 
-    return CVRPTW_SET(depot_loc.to(device),
-        node_loc.to(device),
-        demand.to(device),
-        capacity.to(device),
-        depot_tw.to(device),
-        node_tw.to(device),
-        durations.to(device))
+    # horizon allows for the feasibility of reaching nodes / returning from nodes within the global tw (service window)
+    horizon = list(zip(min_t, service_window - max_t))
+    epsilon = np.maximum(np.abs(rnds.standard_normal([size, graph_size])), 1 / time_factor)
+
+    # sample earliest start times a
+    a = [rnds.randint(*h) for h in horizon]
+
+    tw = [np.transpose(np.vstack((rt,  # a
+                                  np.minimum(rt + tw_expansion * time_factor * sd, h[-1]).astype(int)  # b
+                                  ))).tolist()
+          for rt, sd, h in zip(a, epsilon, horizon)]
+
+    a = [CVRPTW_SET(*data) for data in zip(
+        torch.tensor(dloc.tolist(), device = device) * time_factor,
+        torch.tensor(nloc.tolist(), device = device) * time_factor,
+        torch.tensor(np.minimum(np.maximum(np.abs(rnds.normal(loc=loc, scale=scale, size=[size, graph_size])).astype(int), 1), max_).tolist(), device = device),
+        torch.tensor(np.full(size, TW_CAPACITIES[graph_size]).tolist(), device = device),
+        torch.tensor([[0, service_window]] * size, dtype = torch.float32, device = device),
+        torch.tensor(tw, dtype = torch.float32, device = device),
+        torch.tensor(np.full([size, graph_size], service_duration).tolist(), device = device)
+    )]
+    return a[0]
 
 
-def gen_valid_data(file_path): 
-    data, capacity, veh_num = load_data('Model/Data/' + file_path)
-    depot_loc = data[0, 1:3]
-    node_loc = data[1:, 1:3]
-    demand = data[1:, 3]
-    capacity = capacity 
-    depot_tw = data[0, 4:6] 
-    node_tw = data[1:, 4:6]
-    durations = data[1:, 6]
-    return CVRPTW_SET(depot_loc.to(device),
-        node_loc.to(device),
-        demand.to(device),
-        capacity.to(device),
-        depot_tw.to(device),
-        node_tw.to(device),
-        durations.to(device))
+def gen_valid_data(file_path, graph_size = 100): 
+    # sample locations
+    rnds = np.random
+    dloc = rnds.uniform(size=(size, 2))  # depot location
+    nloc = rnds.uniform(size=(size, graph_size, 2))  # node locations
+
+    # TW start needs to be feasibly reachable directly from depot
+    min_t = np.ceil(np.linalg.norm(dloc[:, None, :]*time_factor - nloc*time_factor, axis=-1)) + 1
+    # TW end needs to be early enough to perform service and return to depot until end of service window
+    max_t = np.ceil(np.linalg.norm(dloc[:, None, :]*time_factor - nloc*time_factor, axis=-1) + service_duration) + 1
+
+    # horizon allows for the feasibility of reaching nodes / returning from nodes within the global tw (service window)
+    horizon = list(zip(min_t, service_window - max_t))
+    epsilon = np.maximum(np.abs(rnds.standard_normal([size, graph_size])), 1 / time_factor)
+
+    # sample earliest start times a
+    a = [rnds.randint(*h) for h in horizon]
+
+    tw = [np.transpose(np.vstack((rt,  # a
+                                  np.minimum(rt + tw_expansion * time_factor * sd, h[-1]).astype(int)  # b
+                                  ))).tolist()
+          for rt, sd, h in zip(a, epsilon, horizon)]
+
+    a = [CVRPTW_SET(*data) for data in zip(
+        torch.tensor(dloc.tolist(), device = device) * time_factor,
+        torch.tensor(nloc.tolist(), device = device) * time_factor,
+        torch.tensor(np.minimum(np.maximum(np.abs(rnds.normal(loc=loc, scale=scale, size=[size, graph_size])).astype(int), 1), max_).tolist(), device = device),
+        torch.tensor(np.full(size, TW_CAPACITIES[graph_size]).tolist(), device = device),
+        torch.tensor([[0, service_window]] * size, dtype = torch.float32, device = device),
+        torch.tensor(tw, dtype = torch.float32, device = device),
+        torch.tensor(np.full([size, graph_size], service_duration).tolist(), device = device)
+    )]
+    return a[0]
+
+
+
 
 
 
@@ -98,18 +139,23 @@ def gen_pyg_data_normalize(demands, time_window, durations, distances, device, s
 
 
 
-try:
-    CVRPTW = generate_cvrptw_data()
-    tsp_coordinates = torch.cat((CVRPTW.depot_loc.expand(1,-1), CVRPTW.node_loc), dim = 0)
-    demands = torch.cat((torch.tensor([0], device =  device), CVRPTW.demand), dim = 0)
-    time_window = torch.cat((CVRPTW.depot_tw.expand(1,-1), CVRPTW.node_tw), dim = 0)
-    durations = torch.cat((torch.tensor([0], device =  device), CVRPTW.durations), dim = 0)
-    time_window = torch.cat((time_window, durations.view(-1,1)), dim = 1)
-    capacity = CVRPTW.capacity
-    distances = gen_distance_matrix(tsp_coordinates, device)
-    data = gen_pyg_data(demands, time_window, durations, distances, device)
-except:
-    print("Error in Gen_CVRPTW_data.py")
+CVRPTW = generate_cvrptw_data()
+tsp_coordinates = torch.cat((CVRPTW.depot_loc.expand(1,-1), CVRPTW.node_loc), dim = 0)
+demands = torch.cat((torch.tensor([0], device =  device), CVRPTW.demand), dim = 0)
+time_window = torch.cat((CVRPTW.depot_tw.expand(1,-1), CVRPTW.node_tw), dim = 0)
+durations = torch.cat((torch.tensor([0], device =  device), CVRPTW.durations), dim = 0)
+time_window = torch.cat((time_window, durations.view(-1,1)), dim = 1)
+capacity = CVRPTW.capacity
+distances = gen_distance_matrix(tsp_coordinates, device)
+data = gen_pyg_data(demands, time_window, durations, distances, device)
+    
+
+
+
+
+
+
+
 
 
 
