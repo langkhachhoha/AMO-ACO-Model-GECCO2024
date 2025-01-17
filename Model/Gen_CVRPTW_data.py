@@ -19,7 +19,6 @@ CVRPTW_SET = namedtuple("CVRPTW_SET",
                         ])   
 
 
-
 def generate_cvrptw_data():
     file_list = os.listdir('Model/Data/')
     num_files = len(file_list)
@@ -111,8 +110,6 @@ try:
     data = gen_pyg_data(demands, time_window, durations, distances, device)
 except:
     print("Error in Gen_CVRPTW_data.py")
-
-
 
 
 
